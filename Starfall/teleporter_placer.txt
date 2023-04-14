@@ -1,0 +1,145 @@
+--@name Teleporter Placer
+--@author SugarTurtle
+--@shared
+
+
+/*
+
+Places a teleport button above where you look, using the command "/ptp red blue green", with the color of your choosing.
+This can spawn multiple sets/pairs of buttons, but two are, in fact, required for a complete circuit. The color part of the
+command can be ignored, otherwise use the standard 0-255 values.
+
+Example command: /ptp 100 255 180
+
+*/
+
+
+--Initializes variables
+type=true
+seats={}
+
+
+--Creates a function that will be repeatedly used to make the teleporter buttons
+function createTeleporter(color)
+    --Gets the position the owner is looking at and spawns the seat/button above that position
+    --Also nocollides the button and sets the color using the function's input variable
+    local pos=owner():getEyeTrace().HitPos
+    local seat=prop.createSeat(pos+Vector(0,0,40),Angle(),"models/maxofs2d/button_05.mdl",true)
+    seat:setNocollideAll(true)
+    seat:setColor(color)
+    
+    --Switches the type (whether its the first in a pair of buttons or second)
+    if type then
+        table.insert(seats,{seat,nil})
+    else
+        seats[#seats][2]=seat
+    end
+    type= not type
+end
+
+
+--Client is the script that corresponds/is local to you and individual players
+if CLIENT then
+    --Runs instruction notification
+    if player()==owner() then
+        print(Color(255),"Use the command once to spawn a teleport button with a color "..
+        "use it a second time to make the final teleporter "..
+        "then repeat however many times.\n")
+        print(Color(50,150,255),"Command structure:   /ptp <red> <green> <blue>\n")
+        print(Color(120,255,100),"Example:   /ptp 100 255 180")
+    end
+    --Hook that runs a function each time a player says something in chat, including team chat
+    hook.add("PlayerChat","",function(ply,msg)
+        if ply==owner() then
+            --ptp stands for Place Teleporter
+            --Sorts out the three values you put into the command to make color and gives you a notification
+            --Also switches between first and second teleporter each time it's calledw
+            if string.sub(msg,1,4)=="/ptp" then
+                local data=string.explode(" ",msg,false)
+                local color=Color(tonumber(data[2]),tonumber(data[3]),tonumber(data[4]))
+                
+                --Sends the color value to the server
+                net.start("ptp")
+                net.writeColor(color)
+                net.send()
+                
+                --This sends a notification depending on type/first/last
+                if type then
+                    notification.addLegacy("Added first teleporter.",0,7)
+                else
+                    notification.addLegacy("Added second teleporter.",0,7)
+                end
+                type= not type
+            end
+        end
+    end)
+end
+
+
+
+--
+if SERVER then
+    --This receives the signal that was sent from the client and runs a function
+    --that was previously created to spawn the button with the color received
+    --It also checks to see whether it should wait to spawn another, for error prevention
+    net.receive("ptp",function()
+        if not wait then
+            wait=true
+            timer.simple(0.3,function() wait=false end)
+                
+            createTeleporter(net.readColor())
+        end
+    end)
+    
+    
+    --This hook runs when a player uses something and returns the player that used it and the entity used
+    --The variable that would have represented the player is "_" a dummy variable, because it is not needed
+    hook.add("PlayerUse","",function(_,ent)
+        --The rest of this is a bit convoluted, but it runs through every button set, then the set itself,
+        --and if the entity used is a seat, do an according to that seat's type
+        for _,v in pairs(seats) do
+            for i,seat in pairs(v) do
+                if ent==seat then
+                    --The seat used has its original position recorded and its set's table index is used to determine type
+                    local start=seat:getPos()
+                    if i==1 then
+                        --Determines if the other seat exists and sets the seat's position to the other's and then
+                        --Ejects the player out of the seat and returns the seat to its original position
+                        if v[2]==nil then
+                            timer.simple(0.1,function()
+                                seat:ejectDriver()
+                                seat:emitSound("ambient/grinder/grinderbot_01.wav")
+                            end)
+                            return
+                        end
+                        seat:setPos(v[2]:getPos())
+                        timer.simple(0.1,function()
+                            seat:ejectDriver()
+                            seat:setPos(start)
+                            seat:emitSound("ambient/energy/zap8.wav")
+                            v[2]:emitSound("ambient/energy/weld2.wav")
+                        end)
+                        return
+                    else
+                        --Same as previous comment, but corresponds to the other seat
+                        if v[1]==nil then
+                            timer.simple(0.1,function()
+                                seat:ejectDriver()
+                                seat:emitSound("ambient/grinder/grinderbot_01.wav")
+                            end)
+                            return
+                        end
+                        seat:setPos(v[1]:getPos())
+                        timer.simple(0.1,function()
+                            seat:ejectDriver()
+                            seat:setPos(start)
+                            seat:emitSound("ambient/energy/zap8.wav")
+                            v[1]:emitSound("ambient/energy/weld2.wav")
+                        end)
+                        return
+                    end
+                end
+            end 
+        end
+    end)
+end
