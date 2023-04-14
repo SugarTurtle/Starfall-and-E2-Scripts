@@ -1,0 +1,63 @@
+--@name Health and Armor Regen
+--@author SugarTurtle
+--@server
+
+
+/*
+
+This code will spawn a healthcharger and suitcharger that will automatically heal you
+once you get hurt and don't run out of healing juice.
+
+*/
+
+
+--This spawns the chargers at the start of the script, and only once, because it is not within a hook
+hKit=prop.createSent(Vector(),Angle(),"item_healthcharger",true)
+aKit=prop.createSent(Vector(),Angle(),"item_suitcharger",true)
+
+
+--This hook is used to run a function when any player is hurt
+--Every function variable but ply, the player hurt, is set as "_" which is a dummy variable
+--that can be discarded and ignored, poor variable, probably deserves it.
+hook.add("PlayerHurt","",function(ply,_,_,_)
+    --Determines if the player hurt was the you, the owner, and creates two seperate hooks
+    --for both chargers
+    if ply==owner() then
+        --This hook runs a function constantly (at the rate the game updates, with server delay)
+        --Returns no variables
+        hook.add("think","regenHealth",function()
+            --Spawns in a new kit, if the current one doesn't or stops existing, at the world origin
+            if not hKit:isValid() and prop.canSpawn() then hKit=prop.createSent(Vector(),Angle(),"item_healthcharger",true) end
+            
+            --Gets the amount of heal juice left out of the many variables saved within the sent
+            --Removes the charger when the juice is zero, leaving it to be automatically replaced, classic
+            local juice=hKit:getSaveTable().m_flJuice
+            if juice==0 then
+                hKit:remove()
+            end
+            
+            --Replicates the healthcharger being used by you if the charger exists 
+            if hKit:isValid() then
+                hKit:use()
+            end
+        end)
+        
+        --Same as other hook, but under a different name and for the suitcharger
+        hook.add("think","regenArmor",function()
+            if not aKit:isValid() and prop.canSpawn() then aKit=prop.createSent(Vector(),Angle(),"item_suitcharger",true) end
+            
+            local juice=aKit:getSaveTable().m_flJuice
+            if juice==0 then
+                aKit:remove()
+            end
+            
+            if aKit:isValid() then
+                aKit:use()
+            end
+        end)
+        
+        --Removes the respective hook if your health or armor is full, ceasing to call the function within
+        if owner():getHealth()>=100 then hook.remove("think","regenHealth") end
+        if owner():getArmor()>=100 then hook.remove("think","regenArmor") end
+    end
+end)
