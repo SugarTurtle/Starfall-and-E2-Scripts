@@ -1,0 +1,217 @@
+--@name Null Rat
+--@author SugarTurtle
+--@shared
+
+/*
+
+This code creates a little null rat from the game boneworks.
+This null rat can be afraid of people that hurt it.
+It is capable of forgiving people on command and after 3 minutes.
+It will follow you unless picked up by another player or instructed to.
+It does not have health.
+You can command it to stay still.
+
+Commands:
+/stay
+/forgive name
+/follow name
+
+Note: Name perameter can be part of the name, as long as nobody else contains that in their name.
+    
+*/
+
+
+--This is the client part of the code, it deals with things from the client, the individual players experiences
+if CLIENT then
+    hook.add("PlayerChat","",function(ply,msg)
+        if ply==owner() then
+            if string.sub(msg,1,5)=="/stay" then
+                net.start("stay")
+                net.send()
+            end
+            
+            if string.sub(msg,1,9)=="/forgive " then
+                local name=string.sub(msg,10)
+                local players=find.allPlayers()
+                
+                if name=="me" then
+                    net.start("forgive")
+                    net.writeEntity(owner())
+                    net.send()
+                else
+                    for _,ply in pairs(players) do
+                        if string.find(string.lower(ply:getName()),name)~=nil then 
+                            net.start("forgive")
+                            net.writeEntity(ply)
+                            net.send()
+                            break
+                        end
+                    end
+                end
+            end
+            
+            if string.sub(msg,1,8)=="/follow " then
+                local name=string.sub(msg,9)
+                local players=find.allPlayers()
+                
+                if name=="me" then
+                    net.start("target")
+                    net.writeEntity(owner())
+                    net.send()
+                else
+                    for _,ply in pairs(players) do
+                        if string.find(string.lower(ply:getName()),name)~=nil then 
+                            net.start("target")
+                            net.writeEntity(ply)
+                            net.send()
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+
+--This is the server part of the code, it deals with things on the server or that everyone experience
+if SERVER then
+    stay=false
+    target=owner()
+    enemies={}
+    
+    body=prop.create(chip():getPos()+Vector(0,0,50),Angle(),"models/hunter/misc/sphere025x025.mdl",false)
+    body:setMaterial("gigaconvertedmats/metalgrate002a")
+    body:setColor(Color(100,100,100))
+    innerBody=hologram.create(chip():getPos()+Vector(0,0,50),Angle(),"models/hunter/misc/sphere025x025.mdl",Vector(0.7))
+    innerBody:setParent(body)
+    innerBody:setMaterial("models/debug/debugwhite")
+    innerBody:setColor(Color(255,140,0,180))
+    head=hologram.create(chip():getPos()+Vector(0,0,0),Angle(),"models/hunter/misc/sphere025x025.mdl",Vector(0.40))
+    --head:setParent(body)
+    head:setMaterial("models/debug/debugwhite")
+    head:setColor(Color(255,140,0,180))
+    h=hologram.create(chip():getPos()+Vector(1.3,-1.25,1),Angle(),"models/hunter/misc/sphere025x025.mdl",Vector(0.2))
+    h:setParent(head)
+    h:setMaterial("phoenix_storms/black_chrome")
+    h=hologram.create(chip():getPos()+Vector(1.3,1.25,1),Angle(),"models/hunter/misc/sphere025x025.mdl",Vector(0.2))
+    h:setParent(head)
+    h:setMaterial("phoenix_storms/black_chrome")
+    
+    net.receive("target",function()
+        target=net.readEntity()
+    end)
+    net.receive("stay",function()
+        stay= not stay
+    end)
+    net.receive("forgive",function()
+        local forgiven=net.readEntity()
+        
+        for i,ply in pairs(enemies) do
+            if ply==forgiven then
+                table.remove(enemies,i)
+                break
+            end
+        end
+    end)
+    
+    hook.add("PlayerUse","",function(ply,ent)
+        if ent==body then
+            target=ply
+        end
+    end)
+    
+    hook.add("EntityTakeDamage","",function(ent,enemy,_,_,_,_)
+        if ent:isValid() and ent==body then
+            local old=false
+            for _,v in pairs(enemies) do
+                if enemy==v and enemy:isPlayer() then
+                    old=true
+                    break
+                end
+            end
+            
+            if not old then
+                table.insert(enemies,enemy)
+                timer.simple(180,function()
+                    local i=#enemies
+                    table.remove(enemies,i)
+                end)
+            end
+        end
+    end)
+    
+    hook.add("tick","",function()
+        if body and body:isValid() then
+            local vel=body:getVelocity()
+            local maxVel=math.max(vel[1],vel[2],vel[3])
+            local nearEnemy
+            
+            for i,ply in pairs(enemies) do
+                if ply and ply:isValid() then
+                    if ply:getPos():getDistance(body:getPos())<=500 then
+                        nearEnemy=ply
+                        break
+                    end
+                else
+                    table.remove(enemies,i)
+                end
+            end
+            
+            --[[local validEnemy=false
+            if nearEnemy and nearEnemy:isValid() then
+                if nearEnemy:isAlive() then
+                    validEnemy=true
+                end
+            end]]
+                        
+            if body and body:isValid() then
+                if nearEnemy and nearEnemy:isValid() and nearEnemy:isAlive() then
+                    body:getPhysicsObject():applyForceCenter((body:getPos()-nearEnemy:getPos()):getNormalized()*40)
+                    
+                    if math.random(0,1000)<35 then
+                        body:emitSound("Weapon_Bugbait.Splat")
+                    end
+                    
+                    head:setPos(body:getPos()+Vector(0,0,6))
+                    head:setAngles((body:getPos()-nearEnemy:getPos()):getAngle()*Angle(0,1,0))
+                else
+                    if stay then
+                        body:getPhysicsObject():applyForceCenter(-body:getVelocity())
+                        
+                        if math.random(0,1000)<5 then
+                            body:emitSound("Weapon_Bugbait.Splat")
+                        end
+                    else
+                        if target:getPos():getDistance(body:getPos())>=70 then
+                            if not stay then
+                                body:getPhysicsObject():applyForceCenter((target:getPos()-body:getPos()):getNormalized()*40)
+                            end
+                            
+                            if math.random(0,1000)<20 then
+                                body:emitSound("Weapon_Bugbait.Splat")
+                            end
+                        elseif maxVel>50 then
+                            if not stay then
+                                body:getPhysicsObject():applyForceCenter(body:getVelocity():getNormalized()*-400)
+                            end
+                        else
+                            if math.random(0,1000)<5 then
+                                body:emitSound("Weapon_Bugbait.Splat")
+                            end
+                        end
+                    end
+                    head:setPos(body:getPos()+Vector(0,0,5.75))
+                    head:setAngles((target:getPos()-body:getPos()):getAngle()*Angle(0,1,0))
+                end
+            end
+            
+            local c=body:getColor()
+            if c~=Color(100,100,100) then
+                head:setColor(Color(c[1],c[2],c[3],180))
+                innerBody:setColor(Color(c[1],c[2],c[3],180))
+                body:setColor(Color(100,100,100))
+            end
+        end
+    end)
+end
