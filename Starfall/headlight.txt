@@ -1,0 +1,335 @@
+--@name Headlight
+--@author SugarTurtle
+--@shared
+
+
+/*
+
+This script afixes a lamp above your head which points where you look.
+You can also change all the settings with commands as well as 2 modes.
+
+Commands:
+/spawnlamp
+/lamp
+/r number
+/g number
+/b number
+/rgb number number number
+/brightness number
+/distance number
+/fov number
+/model string
+/texture string
+
+*/
+
+
+--Setting
+spawnOnChip=true
+
+--Default lamp spawn. What settings your lamp will have on first spawn
+lampData={
+    on = true,
+    r = 255,
+    g = 240,
+    b = 180,
+    Brightness = 2,
+    Dist = 4096,
+    FOV = 120,
+    Model = "models/maxofs2d/lamp_flashlight.mdl",
+    Texture = "effects/flashlight001"
+}
+
+--Initializes variables
+c={lampData.r,lampData.g,lampData.b}
+r=Color(0,1,1)
+strobe=false
+rainbow=false
+
+--Don't feel like explaining these, maybe later if people ask me to
+function netCommandNum(prefix,command,msg)
+    if msg==nil then return end
+    if msg[1]==prefix..string.lower(command) and msg[2]~=nil then
+        msg[2]=tonumber(msg[2])
+        net.start(command)
+        net.writeFloat(msg[2])
+        net.send()
+        notification.addLegacy(command.." set to "..msg[2],0,3)
+    end
+end
+function netCommandString(prefix,command,msg)
+    if msg==nil then return end
+    if msg[1]==prefix..string.lower(command) and msg[2]~=nil then
+        net.start(command)
+        net.writeString(msg[2])
+        net.send()
+        notification.addLegacy(command.." set to "..msg[2],0,3)
+    end
+end
+
+function receiveNetNum(a,b)
+    net.receive(a,function()
+        if w~=nil then
+            w[b]=net.readFloat()
+        end
+    end)
+end
+function receiveNetString(a,b)
+    net.receive(a,function()
+        if w~=nil then
+            w[b]=net.readString()
+        end
+    end)
+end
+
+
+--This is the client part of the code, it deals with things from the client, the individual players experiences
+if CLIENT then
+    --This hook runs when a player sends a message to chat and returns the respective player and message
+    if player()==owner() then
+        hook.add("PlayerChat","",function(ply,msg)
+            if ply==owner() then
+                --Spilits messsage into pieces by spaces
+                msg=string.explode(" ",msg)
+                
+                --Checks for no perameter commands
+                if msg[1]=="/spawnlamp" then
+                    net.start("spawn")
+                    net.send()
+                end
+                if msg[1]=="/lamp" then
+                    net.start("lamp")
+                    net.send()
+                end
+                if msg[1]=="/strobe" then
+                    net.start("strobe")
+                    net.send()
+                end
+                if msg[1]=="/rainbow" then
+                    net.start("rainbow")
+                    net.send()
+                end
+                
+                --Bunch of single, number perameter commands
+                netCommandNum("/","Brightness",msg)
+                netCommandNum("/","R",msg)
+                netCommandNum("/","G",msg)
+                netCommandNum("/","B",msg)
+                netCommandNum("/","FOV",msg)
+                netCommandNum("/","Distance",msg)
+                netCommandString("/","Texture",msg)
+                netCommandString("/","Model",msg)
+                
+                --Detects if the first part of the 
+                if msg[1]=="/rgb" then
+                    if not msg[2] then
+                        msg[2]=0
+                        msg[3]=0
+                        msg[4]=0
+                    elseif not msg[3] then
+                        msg[3]=0
+                        msg[4]=0
+                    elseif not msg[4] then
+                        msg[4]=0
+                    end
+                    net.start("rgb")
+                    net.writeColor(Color(tonumber(msg[2]),tonumber(msg[3]),tonumber(msg[4])))
+                    net.send()
+                    
+                    notification.addLegacy("Color has been set to ["..msg[2]..","..msg[3]..","..msg[4].."].",0,3)
+                end
+            end
+        end)
+    end
+end
+
+
+--This is the server part of the code, it deals with things on the server or that everyone experience
+if SERVER then
+    --Initializes variables
+    lamp=nil
+    w=nil
+    
+    --If spawnOnChip is true, the lamp will automatically spawn when you place the chip down
+    if spawnOnChip then
+        lamp=prop.createSent(owner():getPos()+Vector(0,0,90),Angle(),"gmod_wire_lamp",true,lampData)
+        w=lamp:getWirelink()
+        lamp:emitSound("HL2Player.FlashLightOn")
+    end
+    
+    --If the "spawn" net signal is received (sent from client) then the lamp will either spawn or despawn
+    net.receive("spawn",function()
+        print(1)
+        if lamp==nil or not lamp:isValid() then
+            lamp=prop.createSent(owner():getPos()+Vector(0,0,90),Angle(),"gmod_wire_lamp",true,lampData)
+            lamp:setNocollideAll(true)
+            w=lamp:getWirelink()
+            lamp:emitSound("HL2Player.FlashLightOn")
+        else
+            lamp:remove()
+            lamp=nil
+            w=nil
+        end
+    end)
+    
+    --If the "lamp" net signal is received from the client, the lamp will turn on or off
+    net.receive("lamp",function()
+        if lamp and lamp:isValid() then
+            if lampData.on then
+                lampData.on=false
+                w.On=0
+                lamp:emitSound("HL2Player.FlashLightOff")
+            else
+                lampData.on=true
+                w.On=1
+                lamp:emitSound("HL2Player.FlashLightOn")
+            end
+        end
+    end)
+    
+    
+    --If the "strobe" net signal is received from the client, the lamp will rapidly turn on and off
+    --The strobe will work regardless of state and will return the lamp to its last state when turned off 
+    net.receive("strobe",function()
+        if lamp and lamp:isValid() then
+            strobe= not strobe
+            print(strobe)
+            if strobe then
+                lastStateA=lampData.on
+                if lampData.on then lastStateB=1 else lastStateB=0 end
+                timer.create("strobe",0.1,0,function()
+                    if lamp and lamp:isValid() then
+                        if lampData.on then
+                            lampData.on=false
+                            w.On=0
+                            lamp:emitSound("HL2Player.FlashLightOff")
+                        else
+                            lampData.on=true
+                            w.On=1
+                            lamp:emitSound("HL2Player.FlashLightOn")
+                        end
+                    end   
+                end)
+            else
+                timer.remove("strobe")
+                lampData.on=lastStateA
+                w.On=lastStateB
+            end
+        end
+    end)
+    
+    
+    --If the "rainbow" net signal is received from the client, then the lamp color will cycle through the rainbows
+    net.receive("rainbow",function()
+        if lamp and lamp:isValid() then
+            rainbow= not rainbow
+            if rainbow then
+                r=Color(0,1,1) --HSV color for red
+                hook.add("think","rainbow",function()
+                    if lamp and lamp:isValid() then
+                        --Adds 5 to the hue each time and when it reaches 360, it will loop back to 0
+                        r=Color((r[1]+5)%360,1,1)
+                        local newR=r:hsvToRGB() --Makes the HSV color usable for color functions
+                        
+                        w.Red=newR[1]
+                        w.Green=newR[2]
+                        w.Blue=newR[3]
+                    end   
+                end)
+            else
+                hook.remove("think","rainbow")
+                if lamp and lamp:isValid() then
+                    w.Red=c[1]
+                    w.Green=c[2]
+                    w.Blue=c[3]
+                end
+            end
+        end
+    end)
+    
+    
+    --When the respective net signals are received, the settings of the lamp will be changed
+    net.receive("Brightness",function()
+        if w~=nil and lamp and lamp:isValid() then
+            w.Brightness=net.readFloat()
+            lampData.Brightness=net.readFloat()
+        end
+    end)
+    net.receive("R",function()
+        if w~=nil and lamp and lamp:isValid() then
+            w.Red=net.readFloat()
+            lampData.r=net.readFloat()
+        end
+    end)
+    net.receive("G",function()
+        if w~=nil and lamp and lamp:isValid() then
+            w.Green=net.readFloat()
+            lampData.g=net.readFloat()
+        end
+    end)
+    net.receive("B",function()
+        if w~=nil and lamp and lamp:isValid() then
+            w.Blue=net.readFloat()
+            lampData.b=net.readFloat()
+        end
+    end)
+    net.receive("FOV",function()
+        if w~=nil and lamp and lamp:isValid() then
+            local a=net.readFloat()
+            w.FOV=a
+            lampData.FOV=a
+        end
+    end)
+    net.receive("Distance",function()
+        if w~=nil and lamp and lamp:isValid() then
+            w.Distance=net.readFloat()
+            lampData.Dist=net.readFloat()
+        end
+    end)
+    net.receive("Texture",function()
+        if w~=nil and lamp and lamp:isValid() then
+            local tex=net.readString()
+            w.Texture=tex
+            lampData.Texture=tex
+        end
+    end)
+    net.receive("Model",function()
+        if w~=nil and lamp and lamp:isValid() then
+            lampData.Model=net.readString()
+        end
+    end)
+    net.receive("rgb",function()
+        if w~=nil and lamp and lamp:isValid() then
+            local c=net.readColor()
+            w.Red=c[1]
+            lampData.r=c[1]
+            w.Green=c[2]
+            lampData.g=c[2]
+            w.Blue=c[3]
+            lampData.b=c[3]
+        end
+    end)
+    
+    
+    --Every time the server updates the lamp will move to its position above you and rotate to point where you look
+    hook.add("think","",function()
+        if lamp and lamp:isValid() then
+            lamp:setPos(owner():getPos()+Vector(0,0,90))
+            lamp:setAngles((owner():getEyeTrace().HitPos-lamp:getPos()):getAngle())
+            lamp:setFrozen(true)
+        end
+    end)
+end
+
+/*
+> gmod_wire_lamp
+number b = 255
+number Brightness = 8
+number Dist = 1024
+number FOV = 90
+number g = 255
+string Model = "models/lamps/torch.mdl"
+boolean on = false
+number r = 255
+string Texture = "effects/flashlight001"
+*/

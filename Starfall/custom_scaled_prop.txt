@@ -1,0 +1,51 @@
+--@name Custom Scaled Prop
+--@author SugarTurtle
+--@server
+
+--Settings
+Prop="models/Gibs/HGIBS.mdl"
+scale=Vector(5)
+
+function createScaledProp(pos,ang,model,frozen,scale)
+
+    --Creates template prop to get data from
+    temp=prop.create(chip():getPos(),Angle(),model,true)
+    
+    --Gets vertex data of the template
+    convexes=temp:getPhysicsObject():getMeshConvexes()
+    
+    --Formating for this is weird, I know
+    --Table "convexes" contains a single table, which houses many tables, and those tables contain
+    --only the index "pos" which is the local position of that prop's vertex
+    --The tables that contain the vertex position are then converted somehow, I don't know how, don't ask
+    local _,propData=mesh.findConvexHull(convexes[1])
+    --"convexes" is then emptied with only the one table in it because its reqired for the format for whatever reason
+    convexes[1]={}
+    --Then for every point, in the reformated points table, is then multiplied by the scale respectively and placed in convexes again
+    for i,v in pairs(propData) do
+        convexes[1][i]=v*scale
+    end
+    
+    --Now we create the custom prop that will act as the collision prop and a hologram for the visual size of it
+    local scaledProp=prop.createCustom(pos,ang,convexes,frozen)
+    local holoProp=hologram.create(pos,ang,model,scale)
+    
+    --What this does is set the scaledProp's data to that of the template's and multiplied if necessary
+    scaledProp:setNoDraw(true)
+    scaledProp:setMass(temp:getMass()*((scale[1]+scale[2]+scale[3])/3))
+    
+    --I have learned that you can make something along the lines of sub-variables, which is useful but confusing simultaneously
+    scaledProp.holo=holoProp
+    scaledProp.holo:setParent(scaledProp)
+    
+    temp:remove()
+    /*temp.p=np
+    np.base=temp
+    np.vis=holoProp
+    np.vis:setParent(np)*/
+    
+    return scaledProp
+end
+
+--Finaly we call the function and let it do its thing! 
+createScaledProp(chip():getPos(),Angle(),Prop,false,scale)
