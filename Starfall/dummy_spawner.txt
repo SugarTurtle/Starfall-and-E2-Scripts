@@ -1,0 +1,126 @@
+--@name Dummy Spawner
+--@author SugarTurtle
+--@shared
+
+/*
+This script allows you to place multiple dummies of your current playermodel down. By default, the spawn bind is alt+r,
+but you can change the bind with "/dummybind <key>". The alt key will always be at the beginning of the bind. If you
+don't know the key name or number by heart (good on you if you do), then use "/bindmode" to toggle bind mode. Bind mode 
+allows you to have each input printed to chat. Either name or number can be used in the "/dummybind" command.
+*/
+
+ragdollLimit=3
+
+--function used to spawn the dummy
+function spawnDummy()
+    --Checks to see if the maximum amount of ragdolls has been reached and removes the oldest if over the limit
+    if #dummies==ragdollLimit then
+        dummies[1]:remove()
+        table.remove(dummies,1)
+        print(Color(200,0,0),"/// Maximum Ragdolls Reached! ///")
+    end
+    
+    --Allows for a delayed function, in this case delaying the spawning and editing of the ragdoll to allow the last part
+    --to do it's thing
+    timer.simple(0.3,function()
+        --Spawns the ragdoll, nocollides it for now, and inserts it into a table for later checks
+        local dummy=prop.createRagdoll(owner():getModel(),false)
+        dummy:setNocollideAll(true)
+        table.insert(dummies,dummy)
+        
+        --Sets the bones to copy the player
+        for i=0,dummy:getPhysicsObjectCount()-1 do
+            local bone=dummy:getPhysicsObjectNum(i)
+            local pos,ang=owner():getBonePosition(dummy:translatePhysBoneToBone(i))
+            
+            bone:setPos(pos)
+            bone:setAngles(ang)
+            --bone:setVelocity(owner():getVelocity())
+        end
+        
+        --Effectively reproduces the statue function on the ragdoll
+        for i=0,dummy:getBoneCount() do
+            --Welds all the bones of the ragdoll to bone 0
+            constraint.weld(dummy,entity(0),i,nil,1500)
+        end
+        
+        --Removes the nocollide placed on the ragdoll to allow for physical interaction
+        timer.simple(2,function()
+            dummy:setNocollideAll(false)
+        end)
+    end)
+end
+
+
+--The client is responsible for processing the part of the script local to each individul player
+if CLIENT then
+    if player()==owner() then --Checks if the client being run is the owners, if not,
+    --the client isn't ran for that player
+        
+        --Initializing default varibles
+        bindMode=false
+        bindKey=28
+        
+        --This hook runs when the chat is updated, it returns the player and the message the player sent
+        hook.add("PlayerChat","",function(ply,msg)
+            if ply==owner() then --Makes sure that the player that sent the message was the owner of the chip
+                msg=string.explode(" ",msg) --Seperates the owner's message into different pieces
+                if msg[1]=="/dummybind" then
+                    local key=tonumber(msg[2]) or input.lookupBinding(msg[2])
+                    if key~=nil then
+                        spawnKey=key
+                    else
+                        print(Color(200,0,0),"/// Thats not a valid key! ///")
+                    end
+                elseif msg[1]=="/bindmode" then
+                    bindMode= not bindMode
+                    if bindMode then
+                        print(Color(100,255,100),"--- Bind Mode enabled ---")
+                        hook.add("inputPressed","",function(key)
+                            print(Color(0,120,225),input.getKeyName(key).." = "..tostring(key))
+                        end)
+                    else
+                        print(Color(255,80,80),"--- Bind Mode disabled ---")
+                        hook.remove("inputPressed","")
+                    end
+                end
+            end
+        end)
+        
+        --This hook runs every time the game updates
+        hook.add("think","",function()
+            --Checks to see if left alt and the selected key (r by default) is pressed at the same time
+            if input.isKeyDown(81) and input.isKeyDown(bindKey) and not wait then
+                --Sets a cooldown for the spawning of dummies, only ends after at least one key is released
+                wait=true
+                timer.create("spawn_cooldown",1,0,function()
+                    if input.isKeyDown(81) and input.isKeyDown(bindKey) then
+                        print(Color(0,90,0),"### Release the dummy key bind! ###")
+                        return
+                    end
+                    timer.remove("spawn_cooldown")
+                    wait=false
+                end)
+                
+                --Prints a message to chat to tell you you've spawned a dummy
+                print(Color(200,140,100),"<#> Spawned Dummy <#>")
+                net.start("spawn_dummy")
+                net.send()
+            end
+        end)
+    end
+end
+
+
+--The server is responsible for processing the part of the script thats the same for everyone
+if SERVER then
+    --Initializes the table "dummies"
+    dummies={}
+    
+    --When a signal is sent from client this function is ran to spawn the dummy using the previously created function
+    net.receive("spawn_dummy",function()
+        spawnDummy()
+    end)
+end
+
+--1,5,7,10,13,14
