@@ -105,14 +105,14 @@ if SERVER then
                     if i==1 then
                         --Determines if the other seat exists and sets the seat's position to the other's and then
                         --Ejects the player out of the seat and returns the seat to its original position
-                        if v[2]==nil then
+                        if v[2]==nil or not v[2]:isValid() then
                             timer.simple(0.1,function()
                                 seat:ejectDriver()
                                 seat:emitSound("ambient/grinder/grinderbot_01.wav")
                             end)
                             return
                         end
-                        seat:setPos(v[2]:getPos())
+                        seat:setPos(v[2]:getPos()-Vector(0,0,40))
                         timer.simple(0.1,function()
                             seat:ejectDriver()
                             seat:setPos(start)
@@ -122,14 +122,14 @@ if SERVER then
                         return
                     else
                         --Same as previous comment, but corresponds to the other seat
-                        if v[1]==nil then
+                        if v[1]==nil or not v[1]:isValid() then
                             timer.simple(0.1,function()
                                 seat:ejectDriver()
                                 seat:emitSound("ambient/grinder/grinderbot_01.wav")
                             end)
                             return
                         end
-                        seat:setPos(v[1]:getPos())
+                        seat:setPos(v[1]:getPos()-Vector(0,0,40))
                         timer.simple(0.1,function()
                             seat:ejectDriver()
                             seat:setPos(start)
