@@ -1,0 +1,42 @@
+--@name Rolling Orb Pet
+--@author SugarTurtle
+--@server
+
+/*
+This script spawns a little pastel orb that follows you around and makes noises :)
+*/
+
+--Creates the orb upon spawning the chip and sets its material and color
+orb=prop.create(chip():localToWorld(Vector(0,0,20)),Angle(),"models/sprops/geometry/sphere_6.mdl",false)
+orb:setMaterial("models/debug/debugwhite")
+orb:setColor(Color(math.random(0,360),0.7,1):hsvToRGB())
+
+--Runs the function every time the server ticks
+hook.add("tick","",function()
+    --Checks to see if the distance from the owner to the orb is greater than or equal to 50 units
+    if owner():getPos():getDistance(orb:getPos())>=50 then
+        --Applies force (adds to existing velocity) to the orb in the direction of the owner
+        orb:getPhysicsObject():applyForceCenter((owner():getPos()-orb:getPos()):getNormalized()*300)
+        
+        --Gives the orb a 5% chance to make a sound every tick
+        if math.random(0,1000)<=50 then
+            orb:emitSound("ambient/materials/squeekyfloor2.wav",nil,150)
+        end
+    else
+        --If the orb is within 50 units of the owner, it will slow down
+        orb:getPhysicsObject():setVelocity(orb:getVelocity()*-0.3)
+        
+        --Gives the orb a 1% chance of making a sound every tick
+        if math.random(0,1000)<=10 then
+            orb:emitSound("ambient/materials/squeekyfloor2.wav",nil,120)
+        end
+    end
+end)
+
+--Calls the function when an entity takes damage
+hook.add("EntityTakeDamage","",function(ent)
+    --Determines if the orb is the entity that took damage and has it play a sound if so 
+    if ent==orb then
+        orb:emitSound("Breakable.MatFlesh",150)
+    end
+end)
