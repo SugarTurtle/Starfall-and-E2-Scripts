@@ -1,0 +1,122 @@
+--@name Prop Thrower
+--@author SugarTurtle
+--@shared
+
+/*
+This script takes any number of prop model paths and throws them at a specified initial velocity. Use the 
+keybind shift+click to throw objects. The props will automatically be removed if either the limit set is reached or 
+the despawn delay ends. Set “despawnDelay” to 0 to not remove the prop after a set time. Set “maxProps” to 0 
+to have no maximum prop limit. Type “/propthrow” in chat to toggle whether the throwing of props is active.
+*/
+
+--Sets the props that will be thrown at random
+propPaths={
+    "models/props_c17/oildrum001.mdl",
+    "models/props_c17/FurnitureFridge001a.mdl",
+    "models/props_junk/wood_crate001a.mdl",
+    "models/props_wasteland/controlroom_filecabinet001a.mdl",
+    "models/props_c17/FurnitureChair001a.mdl",
+    "models/props_junk/MetalBucket01a.mdl"
+}
+
+--Other settings
+spawnDist=100
+speed=10000
+inertia=1
+mass=100
+despawnDelay=3
+maxProps=15
+
+--Initializes variables
+props={}
+active=true
+
+--Client runs code that the individual player experiences; each person runs their own client
+if CLIENT then
+    --Only the owner of the chip will have the hooks added
+    --This is so the server doesn’t receive multiple net signals from other players’ clients
+    --player() represents the player the current client being run belongs to
+    if player()==owner() then
+        hook.add("PlayerChat","fire",function(ply,msg)
+            if ply==owner() and msg==“/propthrow” then
+                net.start("active")
+                net.send()
+            end
+        end)
+        
+        --Runs the function when a player presses a key, provides player and key enum pressed
+        hook.add("KeyPress","",function(ply,key)
+            if ply==owner() and key==1 and input.isShiftDown() then --Shift+Click
+                net.start("pressed")
+                net.writeBool(true)
+                net.send()
+            end
+        end)
+        --Runs the function when a player releases a key, provides player and key enum released
+        hook.add("KeyRelease","",function(ply,key)
+            if ply==owner() and key==1 then
+                net.start("pressed")
+                net.writeBool(false)
+                net.send()
+            end
+        end)
+    end
+end
+
+
+--The server runs code that everyone/the server experiences
+if SERVER then
+    --Net signals allows the client and server to communicate, otherwise every variable is local to that 
+    --Receives the net signal “active” and toggles the boolean value
+    net.receive("active",function()
+        active= not active
+    end)
+    --Receives the net signal “pressed” and changes the pressed variable to the boolean sent
+    net.receive("pressed",function()
+        pressed=net.readBool()
+    end)
+    
+    --Runs the function every server tick
+    hook.add("tick","",function()
+        if active and pressed and not wait then
+            --Sets a spawn cooldown to avoid triggering the spawn rate limit
+            wait=true
+            timer.simple(0.3,function()
+                wait=false
+            end)
+            --Spawns the prop in front of where the player is looking at the specified distance
+            local pos=localToWorld(Vector(spawnDist,0,0),Angle(),owner():getEyePos(),owner():getEyeAngles())
+            local p=prop.create(pos,owner():getEyeAngles(),propPaths[math.round(math.random(1,#propPaths))],false)
+            p:setInertia(Vector(inertia))
+            p:setMass(mass)
+            
+            --Sets the velocity of the prop go in the direction you are looking in
+            p:getPhysicsObject():setVelocity(localToWorld(Vector(speed,0,0),Angle(),Vector(),owner():getEyeAngles()))
+            
+            --Adds the prop to a table to remove the prop later
+            if despawnTime>0 or math.round(maxProp,0)>0 then
+                table.insert(props,p)
+            end
+            --If the despawnTime setting is above 0 then a timer will be set to remove the prop after that time
+            if despawnTime>0 then
+                timer.simple(despawnDelay,function()
+                    if p and p:isValid() then
+                        p:remove()
+                        table.remove(props,1)
+                    end
+                end)
+            end
+        end
+
+        --If the maxProp setting is above 0, whenever the existing thrown props exceeded that number,
+        --the oldest prop will be removed
+        if math.round(maxProp,0)>0 then
+            if #props > math.round(maxProps,0) then
+                if props[1] and props[1]:isValid() then
+                    props[1]:remove()
+                    table.remove(props,1)
+                end
+            end
+        end
+    end)
+end
