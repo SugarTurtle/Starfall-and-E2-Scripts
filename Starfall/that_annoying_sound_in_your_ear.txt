@@ -1,0 +1,68 @@
+--@name That Annoying Sound In Your Ear
+--@author SugarTurtle
+--@client
+
+/*
+This script plays a sound on loop at the selected players positions. The stopsound console command does not 
+work on this sound as it will be created again if it detects it was stopped. The player selection is determined by either a whitelist or blacklist. The whitelist and blacklist cannot be empty or filled at the same time.
+*/
+
+--Settings
+whitelist={"ggg"} --Names or steam ids of players to include
+blacklist={} --Names or steam ids of players to exclude
+thatSound="Airboat.FireGunLoop" --Sound path to use, use the sound browser to find
+
+--Checks if the owner of the client is one of the selected players
+--If at least one list contains players
+if #whitelist!=0 or #blacklist!=0 then
+    --If both lists contain players
+    if #whitelist!=0 and #blacklist!=0 then
+        error("The whitelist and blacklist cant contain players at the same time",20)
+    else
+        --If only the whitelist contains players
+        if #whitelist!=0 then
+            for _,ply in pairs(whitelist) do
+                --If the name in the list matches part of the client owners name or if their steam ID does
+                if string.find(string.lower(player():getName()),string.lower(ply)) then
+                    selection=true
+                    break
+                elseif player():getSteamID()==ply then
+                    selection=true
+                    break
+                end
+            end
+        else
+            --If the clients owner doesnt equal anyone in the list, selection remains true, but if the clients owner 
+            --does equal someone on the list, selection is set to false
+            selection=true
+            for _,ply in pairs(blacklist) do
+                if string.find(string.lower(player():getName()),string.lower(ply)) then
+                    selection=false
+                    break
+                elseif player():getSteamID()==ply then
+                    selection=false
+                    break
+                end
+            end
+        end
+    end
+else
+    error("The whitelist and blacklist are both empty",18)
+end
+
+--If the player was one of the selected players
+if selection then
+    --Initial sound to use
+    Sound=sound.create(player(),thatSound)
+    Sound:setVolume(0.2)
+    Sound:play()
+
+    hook.add("think","",function()
+        if not Sound:isPlaying() then
+            Sound:destroy()
+            Sound=sound.create(player(),thatSound)
+            Sound:setVolume(0.2)
+            Sound:play()
+        end
+    end)
+end
