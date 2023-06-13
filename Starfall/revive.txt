@@ -4,20 +4,16 @@
 
 
 /*
-
 Very simple, respawns you at your point of death.
-
 */
 
-
---Initializes the pos variable
-pos=Vector()
 
 --Hook runs function when a player dies, in this case, if that player is you,
 --it will save your current location, where you died
 hook.add("PlayerDeath","",function(ply)
     if ply==owner() then
         pos=owner():getPos()
+        ang=owner():getAngles()[2]
     end
 end)
 
@@ -28,11 +24,12 @@ hook.add("PlayerSpawn","",function(ply)
     if ply==owner() then
         --Spawns a seat at your point of death
         --The model can be anything, so I made it a skull, don't tell anyone.
-        seat=prop.createSeat(pos,Angle(),"models/Gibs/HGIBS.mdl",true)
+        seat=prop.createSeat(pos,Angle(0,ang,0),"models/Gibs/HGIBS.mdl",true)
         
         --Sets the seat to be invisible, has you sit in the seat, and removes the seat, forcing you out of it
         seat:setNoDraw(true)
         seat:use()
+        seat:ejectDriver()
         seat:remove()
     end
 end)
