@@ -1,0 +1,210 @@
+--@name Object Wiggler
+--@author SugarTurtle
+--@shared
+
+/*
+This script makes objects wiggle randomly. Use alt+click to wiggle an object you are looking at and alt+rightclick to stop wiggling an object.
+*/
+
+--Settings
+maxForcers=20
+velocity=400
+
+--Function used to check to see if the cpu quota is too high
+function checkQuota(percent)
+    return cpuTotalUsed()<cpuMax()*percent
+end
+
+--Function to allow for keybinds to be used
+function enableKeybinds()
+    --Calls the function every tick
+    hook.add("tick","keybinds",function()
+        --If statement conditions with too complex of logic tend to break so i have to do this
+        local alt=input.isKeyDown(81)||input.isKeyDown(82)
+        --If an alt key and mouse1 is being pressed
+        if alt and owner():keyDown(1) and not wait then
+            --Net signals allows the server and client to communicate data
+            net.start("wiggle_object")
+            net.send()
+            
+            --Makes a variable used for a cooldown and only stops after the shortcut keys are released
+            wait=true
+            timer.create("spawn_cooldown",0.3,0,function()
+                if not alt or not owner():keyDown(1) then
+                    wait=false
+                    timer.remove("spawn_cooldown")
+                end
+            end)
+        end
+        
+        --If an alt key and mouse2 is being pressed
+        if alt and owner():keyDown(2048) and not wait then
+            --Net signals allows the server and client to communicate data
+            net.start("unwiggle_object")
+            net.send()
+            
+            --Makes a variable used for a cooldown and only stops after the shortcut keys are released
+            wait=true
+            timer.create("spawn_cooldown",0.3,0,function()
+                if not alt or not owner():keyDown(2048) then
+                    wait=false
+                    timer.remove("spawn_cooldown")
+                end
+            end)
+        end
+    end)
+end
+
+if CLIENT then
+    --Makes sure the only client sending net signals is the owner's, prevents repeat signals from other players' clients
+    if player()==owner() then
+        --Runs the function created earlier
+        enableKeybinds()
+        active=true
+        
+        --Calls function when a player sends a message to chat
+        hook.add("PlayerChat","command",function(ply,msg)
+            if ply==owner() and msg=="/wiggler" then
+                active=!active
+                if active then
+                    enableKeybinds()
+                    print(Color(90,210,50),"<?> Wiggler Editing Enabled! <?>")
+                else
+                    hook.remove("tick","keybinds")
+                    print(Color(210,50,75),"<?> Wiggler Editing Disabled! <?>")
+                end
+            end
+        end)
+    end
+end
+
+
+--Handles the server section of the script, things the whole server experiences
+if SERVER then
+   --Initializes three variables
+    index=0
+    entities={}
+    count=0
+    
+    --Receives a net signal and sets undo to true
+    net.receive("unwiggle_object",function()
+        undo=true
+        --Sets the entity to be removed as the last added index, in this case, the highest index
+        remEnt=entities[table.maxn(entities)]
+    end)
+    
+    --When the command is made, the entity you are looking at should wiggle
+    net.receive("wiggle_object",function()
+        --Sets the entity to wiggle as the entity you are looking at
+        local ent=owner():getEyeTrace().Entity
+        
+        --Checks to see if the entity is an existing and valid object
+        if ent and ent:isValid() and count<maxForcers then
+            --Increments the index of the new forcer by one and makes a local variable for it
+            index=index+1
+            local thisIndex=index
+            count=count+1
+            
+            --Adds the entity to the table with the index, index so we can track the order in which entites were effected
+            entities[index]=ent
+            
+            --The default settings of the forcer to be used upon spawning it in
+            local forcerData={
+                Force=1,
+                Length=ent:getBoundingRadius()+15,
+                Model="models/jaanus/wiretool/wiretool_siren.mdl",
+                Reaction=false,
+                ShowBeam=false
+            }
+            
+            --Spawns the forcer and gets the wirelink of the forcer (whats used to send data to inputs of the forcer)
+            local forcer=prop.createSent(ent:getPos(),Angle(),"gmod_wire_forcer",true,forcerData)
+            forcer:setNoDraw(true)
+            forcer:setNocollideAll(true)
+            forcer:getWirelink().Velocity=-velocity
+            print(Color(150,100,255),"<+> Wiggler added to "..ent:getModel().."! <+>")
+            
+            --Makes a tick hook specific to the forcer calls the function repeatedly
+            hook.add("tick","wiggler_"..index,function()
+                --Checks to see if the wiggler is using too much cpu power
+                if checkQuota(0.35) then
+                    --If the forcer exists and is valid and the entity being wiggled still exists
+                    if forcer and forcer:isValid() and ent:isValid() then
+                        local randAng=Angle(math.random(0,360),math.random(0,360),math.random(0,360))
+                        local center=ent:localToWorld(ent:obbCenter())
+                        --Sets the position of the forcer to be in a random direction at an appropriate distance plus 15
+                        forcer:setPos(localToWorld(Vector(ent:getBoundingRadius()+15,0,0),Angle(),center,randAng))
+                        --Sets the forcer angle so that the forcer is looking towards the entity being wiggled
+                        local _,ang=localToWorld(Vector(),Angle(-90,0,0),Vector(),randAng)
+                        forcer:setAngles(ang)
+                    end
+                end
+                
+                --If keybind is activated and the entity being removed is this entity the tick
+                --function will cease and the forcer will be deleted
+                if undo then
+                    if remEnt==ent then
+                        --Reduces count by 1
+                        count=count-1
+                        
+                        --Removes the index from the table "entities"
+                        entities[thisIndex]=nil
+                        
+                        --Removes the hooks so they no longer call the functions when the event happens
+                        hook.remove("tick","wiggler_"..thisIndex)
+                        hook.remove("EntityRemoved","wiggler_"..thisIndex)
+                        hook.remove("playerDeath","wiggler_"..thisIndex)
+                        
+                        --If the forcer still exists and is valid, remove it, destroy it, and murder its kin too for good measure
+                        if forcer and forcer:isValid() then
+                            forcer:remove()
+                            print(Color(200,0,0),"/// Unwiggled entity! ///")
+                        end
+                        
+                        --Resets the "undo" variable to false
+                        undo=false
+                    end
+                end
+            end)
+            
+            --Same as last block but if the entity being wiggled is deleted
+            hook.add("EntityRemoved","",function(removedEnt)
+                --Reduces count by 1
+                count=count-1
+                        
+                if removedEnt==ent then
+                    --Removes the hooks so they no longer call the functions when the event happens
+                    hook.remove("tick","wiggler_"..thisIndex)
+                    hook.remove("EntityRemoved","wiggler_"..thisIndex)
+                    hook.remove("playerDeath","wiggler_"..thisIndex)
+                    
+                    --If the forcer still exists and is valid, remove it
+                    if forcer and forcer:isValid() then
+                        forcer:remove()
+                        print(Color(200,0,0),"/// Entity was removed! ///")
+                    end
+                end
+            end)
+            
+            --Calls the function when a player dies
+            hook.add("playerDeath","wiggler_"..thisIndex,function(ply,_)
+                --Reduces count by 1
+                count=count-1
+                
+                --If the player that died was the entity
+                if ply==ent then
+                    --Removes the hooks so they no longer call the functions when the event happens
+                    hook.remove("tick","wiggler_"..thisIndex)
+                    hook.remove("EntityRemoved","wiggler_"..thisIndex)
+                    hook.remove("playerDeath","wiggler_"..thisIndex)
+                    
+                    --If the forcer still exists and is valid, remove it
+                    if forcer and forcer:isValid() then
+                        forcer:remove()
+                        print(Color(200,0,0),"<!> Player killed due to wiggling! <!>")
+                    end
+                end
+            end)
+        end
+    end)
+end
