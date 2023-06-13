@@ -15,7 +15,6 @@ once you get hurt and don't run out of healing juice.
 hKit=prop.createSent(Vector(),Angle(),"item_healthcharger",true)
 aKit=prop.createSent(Vector(),Angle(),"item_suitcharger",true)
 
-
 --This hook is used to run a function when any player is hurt
 --Every function variable but ply, the player hurt, is set as "_" which is a dummy variable
 --that can be discarded and ignored, poor variable, probably deserves it.
@@ -40,6 +39,9 @@ hook.add("PlayerHurt","",function(ply,_,_,_)
             if hKit:isValid() then
                 hKit:use()
             end
+            
+            --Removes the hook if your health is full, ceasing to call the function within
+            if owner():getHealth()>=100 then hook.remove("think","regenHealth") end
         end)
         
         --Same as other hook, but under a different name and for the suitcharger
@@ -54,9 +56,12 @@ hook.add("PlayerHurt","",function(ply,_,_,_)
             if aKit:isValid() then
                 aKit:use()
             end
+            
+            --Removes the hook if your armor is full, ceasing to call the function
+            if owner():getArmor()>=100 then hook.remove("think","regenArmor") end
         end)
         
-        --Removes the respective hook if your health or armor is full, ceasing to call the function within
+        --Removes the hook if your health or armor is full, ceasing to call the function within
         if owner():getHealth()>=100 then hook.remove("think","regenHealth") end
         if owner():getArmor()>=100 then hook.remove("think","regenArmor") end
     end
