@@ -4,7 +4,8 @@
 
 /*
 This script plays a sound on loop at the selected players positions. The stopsound console command does not 
-work on this sound as it will be created again if it detects it was stopped. The player selection is determined by either a whitelist or blacklist. The whitelist and blacklist cannot be empty or filled at the same time.
+work on this sound as it will be created again if it detects it was stopped. The player selection is determined 
+by either a whitelist or blacklist. The whitelist and blacklist cannot be empty or filled at the same time.
 */
 
 --Settings
