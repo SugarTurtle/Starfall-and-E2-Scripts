@@ -1,0 +1,166 @@
+--@name Object Levitator
+--@author SugarTurtle
+--@shared
+
+--[[
+This script makes objects levitate in place. Use the shortcut alt+click to levitate. Use the shortcut alt+right_click to unlevitate
+]]
+
+--Settings
+maxForcers=20
+
+--Function used to check to see if the cpu quota is too high
+function checkQuota(percent)
+    return cpuTotalUsed()<cpuMax()*percent
+end
+
+--Handles the clientside section of the script, things individual players experience
+if CLIENT then
+    --Makes sure the only client sending net signals is the owner's, prevents repeat signals from other players' clients
+    if player()==owner() then
+        --Calls the function every tick
+        hook.add("tick","",function()
+            --If statement conditions with too complex of logic tend to break so i have to do this
+            local alt=input.isKeyDown(81)||input.isKeyDown(82)
+            --If an alt key and clicking 
+            if alt and owner():keyDown(1) and not wait then
+                --Net signals allows the server and client to communicate data
+                net.start("levitate_object")
+                net.send()
+                
+                --Makes a variable used for a cooldown and only stops after the shortcut keys are released
+                wait=true
+                timer.create("spawn_cooldown",0.3,0,function()
+                    if not alt or not owner():keyDown(1) then
+                        wait=false
+                        timer.remove("spawn_cooldown")
+                    end
+                end)
+            end
+            
+            --If an alt key and right clicking
+            if alt and owner():keyDown(2048) and not wait then
+                --Net signals allows the server and client to communicate data
+                net.start("unlevitate_object")
+                net.send()
+                
+                --Makes a variable used for a cooldown and only stops after the shortcut keys are released
+                wait=true
+                timer.create("spawn_cooldown",0.3,0,function()
+                    if not alt or not owner():keyDown(2048) then
+                        wait=false
+                        timer.remove("spawn_cooldown")
+                    end
+                end)
+            end
+        end)
+    end
+end
+
+
+--Handles the server section of the script, things the whole server experiences
+if SERVER then
+    --Initializes two variables
+    index=0
+    count=0
+    
+    --When this receives the "unlevitate_object" signal the variable "undo" will be set to true
+    net.receive("unlevitate_object",function()
+        undo=true
+    end)
+    
+    --When the shortcut is done, the entity you are looking at should levitate
+    net.receive("levitate_object",function()
+        --Sets the entity to levitate as the entity you are looking at
+        local ent=owner():getEyeTrace().Entity
+        
+        --Checks to see if the entity is an existing and valid object
+        if ent and ent:isValid() and count<maxForcers then
+            --Increments the index of the new forcer and forcer count by one and makes a local variable for index
+            count=count+1
+            index=index+1
+            local thisIndex=index
+            
+            --The default settings of the forcer to be used upon spawning it in
+            local forcerData={
+                Force=1,
+                Length=ent:getBoundingRadius()+15,
+                Model="models/jaanus/wiretool/wiretool_siren.mdl",
+                Reaction=false,
+                ShowBeam=false
+            }
+            
+            --Spawns the forcer and gets the wirelink of the forcer (whats used to send data to inputs of the forcer)
+            local forcer=prop.createSent(ent:getPos(),Angle(),"gmod_wire_forcer",true,forcerData)
+            forcer:setNoDraw(true)
+            forcer:setNocollideAll(true)
+            local link=forcer:getWirelink()
+            print(Color(150,100,255),"/// Levitator added to "..ent:getModel().."! ///")
+            
+            --Makes a tick hook specific to the forcer, calls the function repeatedly
+            hook.add("tick","levitator_"..index,function()
+                --Checks to see if the wiggler is using too much cpu power
+                if checkQuota(0.35) then
+                    --If the forcer exists and is valid and the entity being levitated still exists
+                    if forcer and forcer:isValid() and ent:isValid() then
+                        local vel=ent:getVelocity()-Vector(0,0,36.5)--Vector(0,0,56.5)
+                        local center=ent:localToWorld(ent:obbCenter())
+                        --Sets the position of the forcer to be in the opposite direction of movement with an appropriate distance plus 15
+                        forcer:setPos(localToWorld(Vector(ent:getBoundingRadius()+15,0,0),Angle(),center,(-vel):getAngle()))
+                        --Sets the forcer angle so that the forcer is looking towards the entity being levitated
+                        local _,ang=localToWorld(Vector(),Angle(90,180,180),Vector(),vel:getAngle())
+                        forcer:setAngles(ang)
+                        --Sets the forcer's velocity to the average of the vector velocities
+                        link.Velocity=-math.abs(vel[1]+vel[2]+vel[3])/3
+                    end
+                end
+                
+                --If the /unlev command or keybind is activated and the entity being looked at is being levitated, the tick
+                --function will cease and the forcer will be deleted
+                if undo then
+                    if owner():getEyeTrace().Entity==ent then
+                        --Reduces count by 1
+                        count=count-1
+                        
+                        --Removes the hooks so they no longer call the functions when the event happens
+                        hook.remove("tick","levitator_"..thisIndex)
+                        hook.remove("EntityRemoved","levitator_"..thisIndex)
+                        
+                        --If the forcer still exists it will be removed
+                        if forcer and forcer:isValid() then
+                            forcer:remove()
+                            print(Color(200,0,0),"/// Unlevitated entity! ///")
+                        end
+                        
+                        --Resets the "undo" variable to false
+                        undo=false
+                    end
+                end
+            end)
+            
+            --Same as last block but if the entity being levitated is deleted
+            hook.add("EntityRemoved","levitator_"..thisIndex,function(removedEnt)
+                if removedEnt==ent then
+                    --Removes the hooks so they no longer call the functions when the event happens
+                    hook.remove("tick","levitator_"..thisIndex)
+                    hook.remove("EntityRemoved","levitator_"..thisIndex)
+                    
+                    --If the forcer still exists it will be removed
+                    if forcer and forcer:isValid() then
+                        forcer:remove()
+                        print(Color(200,0,0),"/// Entity was removed! ///")
+                    end
+                end
+            end)
+        end
+    end)
+end
+
+/*
+> gmod_wire_forcer
+number Force = 1
+number Length = 100
+string Model = "models/jaanus/wiretool/wiretool_siren.mdl"
+boolean Reaction = false
+boolean ShowBeam = true
+*/
