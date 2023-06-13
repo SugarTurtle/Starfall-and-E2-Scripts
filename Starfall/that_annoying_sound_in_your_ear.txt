@@ -8,7 +8,7 @@ work on this sound as it will be created again if it detects it was stopped. The
 */
 
 --Settings
-whitelist={"ggg"} --Names or steam ids of players to include
+whitelist={} --Names or steam ids of players to include
 blacklist={} --Names or steam ids of players to exclude
 thatSound="Airboat.FireGunLoop" --Sound path to use, use the sound browser to find
 
