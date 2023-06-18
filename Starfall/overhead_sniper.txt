@@ -1,0 +1,48 @@
+--@name Overhead Sniper
+--@author SugarTurtle
+--@server
+
+--Runs the function every tick
+hook.add("tick","",function()
+    --If the turret exists the and the owner is pressing lalt+mouse1 it will fire
+    --Also sets the turret to be above the chip owner's head and point to where the owner is looking
+    if isValid(sniper) then
+        if owner():keyDown(1) and owner():keyDown(262144) then sniperWire.Fire=1 else sniperWire.Fire=0 end
+            
+        sniper:setPos(owner():getPos()+Vector(0,0,owner():obbSize()[3]+20))
+        sniper:setAngles((owner():getEyeTrace().HitPos-sniper:getPos()):getAngle())
+    end
+end)
+
+--Default settings the turret is given upon spawning
+turretData={
+    damage = 1000,
+    delay = 0.1,
+    force = 1000,
+    Model = "models/weapons/w_smg1.mdl",
+    numbullets = 1,
+    sound = "0",
+    spread = 0,
+    tracer = "Tracer",
+    tracernum = 0
+}
+
+--Spawns, Nocollides, NoDraws, and gets the wirelink of the turret
+--Wirelinks are like the direct access to the wire sent's inputs, like Fire or Spread
+sniper=prop.createSent(owner():getPos(),Angle(),"gmod_wire_turret",true,turretData)
+sniper:setNocollideAll(true)
+sniper:setNoDraw(true)
+sniperWire=sniper:getWirelink()
+
+/*
+> gmod_wire_turret
+number damage = 10
+number delay = 0.05
+number force = 1
+string Model = "models/weapons/w_smg1.mdl"
+number numbullets = 1
+string sound = "0"
+number spread = 0
+string tracer = "Tracer"
+number tracernum = 1
+*/
