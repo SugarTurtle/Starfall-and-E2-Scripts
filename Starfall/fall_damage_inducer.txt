@@ -1,0 +1,91 @@
+--@name Fall Damage Inducer
+--@author SugarTurtle
+--@shared
+
+/*
+This script makes an entity fall violently. Use alt+click to use on object you are looking at.
+*/
+
+
+function checkQuota(percent)
+    return cpuTotalAverage()<cpuMax()*percent
+end
+
+if CLIENT then
+    --Makes sure the only client sending net signals is the owner's, prevents repeat signals from other players' clients
+    if player()==owner() then
+        hook.add("tick","",function()
+            --If statement conditions with too complex of logic tend to break so i have to do this
+            local alt=input.isKeyDown(81)||input.isKeyDown(82)
+            --If an alt key and mouse1 is being pressed
+            if alt and owner():keyDown(107) and not wait then
+                --Net signals allows the server and client to communicate data
+                net.start("fall_damage")
+                net.send()
+                
+                --Makes a variable used for a cooldown and only stops after the shortcut keys are released
+                wait=true
+                timer.create("spawn_cooldown",0.3,0,function()
+                    if not alt or not owner():keyDown(107) then
+                        wait=false
+                        timer.remove("spawn_cooldown")
+                    end
+                end)
+            end
+        end)
+    end
+end
+
+if SERVER then
+   --Initializes two variables
+    index=0
+    forcers={}
+    
+    --When the command is made, the entity you are looking at should die
+    net.receive("fall_damage",function()
+        --Sets the entity you are looking at as the target
+        local ent=owner():getEyeTrace().Entity
+        
+        --Checks to see if the entity is an existing and valid object
+        if ent and ent:isValid() and !ownerDeath then
+            --Increments the index of the new forcer by one and makes a local variable for it
+            index=index+1
+            local thisIndex=index
+            
+            --The default settings of the forcer to be used upon spawning it in
+            local forcerData={
+                Force=1,
+                Length=ent:getBoundingRadius()+100,
+                Model="models/jaanus/wiretool/wiretool_siren.mdl",
+                Reaction=false,
+                ShowBeam=false
+            }
+            
+            --Spawns the forcer and gets the wirelink of the forcer (whats used to send data to inputs of the forcer)
+            local forcer=prop.createSent(Vector(),Angle(180,0,0),"gmod_wire_forcer",true,forcerData)
+            forcer:setNoDraw(true)
+            forcer:setNocollideAll(true)
+            local link=forcer:getWirelink()
+            
+            --Sets the position of the forcer to be above the entity and sets the velocity to pull them up
+            forcer:setPos(ent:localToWorld(ent:obbCenter())+Vector(0,0,ent:getBoundingRadius()+20))
+            link.Velocity=-400
+            
+            --Sets a delay so there's time for the game to react to all the operations
+            timer.simple(0.1,function()
+                --Sets the position of the forcer to be above the entity and sets the velocity to push them down
+                forcer:setPos(ent:localToWorld(ent:obbCenter())+Vector(0,0,ent:getBoundingRadius()+20))
+                link.Velocity=10000
+            end)
+            
+            --Sets a delay to remove the forcer once it has done its thing
+            timer.simple(0.2,function()
+                if forcer and forcer:isValid() then
+                    forcer:remove()
+                end
+            end)
+            
+            print(Color(150,100,255),"/// Attempt to kill "..ent:getModel().."! ///")
+        end
+    end)
+end
