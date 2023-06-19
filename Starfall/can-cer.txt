@@ -1,0 +1,127 @@
+--@name Can-cer
+--@author SugarTurtle
+--@model models/beer/wiremod/watersensor.mdl
+--@shared
+
+--This is the client part of the code, it deals with things from the client, the individual players experiences
+if CLIENT then
+    if player()==owner() then
+        hook.add("PlayerChat","",function(ply,msg)
+            if ply==owner() then
+                if msg=="/cure" then
+                    net.start("cure")
+                    net.send()
+                end
+                
+                if msg=="/can" then
+                    net.start("move")
+                    net.send()
+                end
+            end
+        end)
+    end
+end
+
+--This is the server part of the code, it deals with things on the server or that everyone experience
+if SERVER then
+    --Makes the carcinogen can
+    theCan=prop.create(chip():getPos()+Vector(0,0,5),Angle(),"models/props_junk/garbage_metalcan001a.mdl",false)
+    theCan:setColor(Color(200,160,140))
+    
+    --Initializes the cans table
+    cans={}
+    
+    --Calls the function whenever an object is picked up by hand (pressing "e")
+    hook.add("OnPlayerPhysicsPickup","can_pickup",function(ply,ent)
+        --If the can is being picked up and the person picking it up isn't the owner
+        if ent==theCan and ply!=owner() then
+            --Makes a global variable for the infected player
+            player=ply
+            
+            --Removes all existing cans
+            for _,v in pairs(cans) do
+                if isValid(v) then
+                    v:remove()
+                end
+            end
+            
+            --Empties the cans table    
+            table.empty(cans)
+            
+            --Creates a timer that spawns a can every 0.3 seconds to avoid a server's prop spam prevention
+            timer.create("cancer",0.3,0,function()
+                if isValid(ply) then
+                    --Gets the size of the infected player and creates a variable representing a random position within
+                    --the player's bounding box
+                    local size=ply:obbSize()
+                    local pos=ply:getPos()+Vector(math.random(-size[1]/2,size[1]/2),math.random(-size[2]/2,size[2]/2),math.random(0,size[3]))
+                    
+                    --Actually makes the can and gives it a random rotation and spawns it at the pos variable, also set to frozen
+                    local can=prop.create(pos,Angle(math.random(0,360),math.random(0,360),math.random(0,360)),"models/props_junk/garbage_metalcan001a.mdl",true)
+                    --Emits a sound effect when a can is spawned
+                    can:emitSound("Popcan.ImpactHard")
+                    can:setColor(Color(200,160,140))
+                    
+                    --Inserts the can into the end of the cans table for later deletion
+                    table.insert(cans,can)
+                end
+                
+                --If the cans count is above 50, the first can in the table will be removed and each entry index will decrease by 1
+                
+                if #cans>10 then
+                    if cans[1] then
+                        cans[1]:remove()
+                    end
+                    
+                    for i,v in pairs(cans) do
+                        if i==#cans then
+                            table.remove(cans,i)
+                        else
+                            cans[i]=cans[i+1]
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+    
+    --Calls the function every time a player dies
+    hook.add("PlayerDeath","",function(ply)
+        --If the player that died is the same as the one that is infected
+        if ply==player then
+            --Removes the timer so cans no longer spawn
+            timer.remove("cancer")
+            
+            --Removes every can in the table
+            for _,v in pairs(cans) do
+                if isValid(v) then
+                    v:remove()
+                end
+            end
+            
+            --Empties the cans table
+            table.empty(cans)
+        end
+    end)
+    
+    --Receives the net signal "cure" and removes all the cans
+    net.receive("cure",function()
+        timer.remove("cancer")
+        
+        for _,v in pairs(cans) do
+            if isValid(v) then
+                v:remove()
+            end
+        end
+            
+        table.empty(cans)
+    end)
+    
+    --Receives the net signal "move" and moves the can to where the owner is looking
+    net.receive("move",function()
+        if isValid(theCan) then
+            theCan:setPos(owner():getEyeTrace().HitPos+Vector(0,0,5))
+            theCan:setAngles(Angle())
+        end
+    end)
+end
