@@ -68,7 +68,7 @@ if SERVER then
                 
                 --If the cans count is above 50, the first can in the table will be removed and each entry index will decrease by 1
                 
-                if #cans>10 then
+                if #cans>50 then
                     if cans[1] then
                         cans[1]:remove()
                     end
